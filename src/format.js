@@ -69,7 +69,7 @@ export async function enrichWithFileSize(images) {
   );
 }
 
-export function formatSelectionSummary(selectedImages) {
+export function formatSelectionSummary(selectedImages, lang = "bg") {
   if (selectedImages.length === 0) return null;
 
   if (selectedImages.length === 1) {
@@ -82,8 +82,15 @@ export function formatSelectionSummary(selectedImages) {
   );
 
   if (sameSize) {
-    return `${selectedImages.length} снимки · ${formatDimensions(first.width, first.height)}`;
+    const size = formatDimensions(first.width, first.height);
+    if (lang === "en") {
+      return `${selectedImages.length} images · ${size}`;
+    }
+    return `${selectedImages.length} снимки · ${size}`;
   }
 
+  if (lang === "en") {
+    return `${selectedImages.length} images with different sizes`;
+  }
   return `${selectedImages.length} снимки с различни размери`;
 }

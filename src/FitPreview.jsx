@@ -91,17 +91,23 @@ function FitPreviewRow({ image, targetWidth, targetHeight, activeFit, onSelectFi
   );
 }
 
-export default function FitPreview({ images, targetWidth, targetHeight, activeFit, onSelectFit }) {
+export default function FitPreview({
+  images,
+  targetWidth,
+  targetHeight,
+  activeFit,
+  onSelectFit,
+  title,
+  hint,
+}) {
   const image = images[0];
   if (!image) return null;
 
   return (
     <section className="fit-preview">
       <div className="fit-preview-header">
-        <h2>Превю на fit</h2>
-        <p>
-          Цел: {targetWidth}×{targetHeight} px. Кликни върху опция, за да я избереш.
-        </p>
+        <h2>{title}</h2>
+        <p>{hint}</p>
       </div>
       <FitPreviewRow
         image={image}

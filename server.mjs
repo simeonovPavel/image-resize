@@ -35,6 +35,65 @@ const MAX_UPLOAD_SIZE = 50 * 1024 * 1024;
 const MAX_UPLOAD_COUNT = 20;
 const DATE_FOLDER_RE = /^resize-\d{4}-\d{2}-\d{2}$/;
 
+const SERVER_MSG = {
+  bg: {
+    unsupportedFormat: "Неподдържан формат: {ext}",
+    unsupportedLogo: "Неподдържан формат за лого: {ext}",
+    noWatermarkLogo: "Няма качено лого за watermark",
+    noDeleteSelection: "Няма избрани файлове за изтриване",
+    imagesNotFound: "Снимките не са намерени",
+    openFolderFailed: "Неуспешно отваряне на папката",
+    invalidFormat: "Невалиден изходен формат",
+    invalidSize: "Невалидна ширина или височина",
+    noImagesSelected: "Няма избрани снимки",
+    noLogoFile: "Няма избран файл за лого",
+    invalidFolder: "Невалидна папка",
+    folderNotFound: "Папката не е намерена",
+    noZipFiles: "Няма валидни файлове за ZIP",
+    noUploadFiles: "Няма избрани файлове",
+    fileTooLarge: "Файлът е твърде голям (макс. 50 MB)",
+    tooManyFiles: "Максимум {count} файла наведнъж",
+    invalidPath: "Невалиден път",
+    fileNotFound: "Файлът не е намерен",
+    unknownExt: "неизвестен",
+  },
+  en: {
+    unsupportedFormat: "Unsupported format: {ext}",
+    unsupportedLogo: "Unsupported logo format: {ext}",
+    noWatermarkLogo: "No watermark logo uploaded",
+    noDeleteSelection: "No files selected for deletion",
+    imagesNotFound: "Images not found",
+    openFolderFailed: "Failed to open folder",
+    invalidFormat: "Invalid output format",
+    invalidSize: "Invalid width or height",
+    noImagesSelected: "No images selected",
+    noLogoFile: "No logo file selected",
+    invalidFolder: "Invalid folder",
+    folderNotFound: "Folder not found",
+    noZipFiles: "No valid files for ZIP",
+    noUploadFiles: "No files selected",
+    fileTooLarge: "File is too large (max 50 MB)",
+    tooManyFiles: "Maximum {count} files at once",
+    invalidPath: "Invalid path",
+    fileNotFound: "File not found",
+    unknownExt: "unknown",
+  },
+};
+
+function reqLang(req) {
+  const header = String(req?.headers?.["accept-language"] || "").toLowerCase();
+  if (header.startsWith("en")) return "en";
+  return "bg";
+}
+
+function msg(req, key, vars = {}) {
+  const lang = reqLang(req);
+  let text = SERVER_MSG[lang]?.[key] || SERVER_MSG.bg[key] || key;
+  return String(text).replace(/\{(\w+)\}/g, (_, name) =>
+    vars[name] == null ? "" : String(vars[name])
+  );
+}
+
 const app = express();
 const PORT = 3001;
 
@@ -101,13 +160,19 @@ const upload = multer({
     fileSize: MAX_UPLOAD_SIZE,
     files: MAX_UPLOAD_COUNT,
   },
-  fileFilter: (_req, file, cb) => {
+  fileFilter: (req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
     if (IMAGE_EXT.has(ext)) {
       cb(null, true);
       return;
     }
-    cb(new Error(`Неподдържан формат: ${ext || "неизвестен"}`));
+    cb(
+      new Error(
+        msg(req, "unsupportedFormat", {
+          ext: ext || msg(req, "unknownExt"),
+        })
+      )
+    );
   },
 });
 
@@ -123,13 +188,19 @@ const uploadLogo = multer({
     fileSize: 10 * 1024 * 1024,
     files: 1,
   },
-  fileFilter: (_req, file, cb) => {
+  fileFilter: (req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
     if (LOGO_EXT.has(ext)) {
       cb(null, true);
       return;
     }
-    cb(new Error(`Неподдържан формат за лого: ${ext || "неизвестен"}`));
+    cb(
+      new Error(
+        msg(req, "unsupportedLogo", {
+          ext: ext || msg(req, "unknownExt"),
+        })
+      )
+    );
   },
 });
 
@@ -345,7 +416,7 @@ async function applyWatermark(pipeline, watermark, imageWidth) {
   } else {
     const logoPath = getCurrentLogoPath();
     if (!logoPath) {
-      throw new Error("Няма качено лого за watermark");
+      throw new Error("NO_WATERMARK_LOGO");
     }
     overlay = await buildImageWatermark(
       logoPath,
@@ -510,12 +581,12 @@ app.delete("/api/images", (req, res) => {
   try {
     const files = Array.isArray(req.body?.files) ? req.body.files : [];
     if (files.length === 0) {
-      return res.status(400).json({ error: "Няма избрани файлове за изтриване" });
+      return res.status(400).json({ error: msg(req, "noDeleteSelection") });
     }
 
     const deleted = deleteImageFiles(files);
     if (deleted.length === 0) {
-      return res.status(404).json({ error: "Снимките не са намерени" });
+      return res.status(404).json({ error: msg(req, "imagesNotFound") });
     }
 
     res.json({ ok: true, count: deleted.length, deleted });
@@ -534,7 +605,7 @@ app.post("/api/open-output", (_req, res) => {
       folder: path.basename(outputDir),
     });
   } catch (err) {
-    res.status(500).json({ error: err.message || "Неуспешно отваряне на папката" });
+    res.status(500).json({ error: err.message || msg(_req, "openFolderFailed") });
   }
 });
 
@@ -571,7 +642,7 @@ app.post("/api/resize", async (req, res) => {
 
     const outputFormat = normalizeOutputFormat(format);
     if (!outputFormat) {
-      return res.status(400).json({ error: "Невалиден изходен формат" });
+      return res.status(400).json({ error: msg(req, "invalidFormat") });
     }
 
     const renameBase = sanitizeRenameBase(rename);
@@ -581,7 +652,7 @@ app.post("/api/resize", async (req, res) => {
     const w = Number(width);
     const h = Number(height);
     if (!Number.isFinite(w) || !Number.isFinite(h) || w < 1 || h < 1) {
-      return res.status(400).json({ error: "Invalid width or height" });
+      return res.status(400).json({ error: msg(req, "invalidSize") });
     }
 
     const available = listImageFiles(IMAGES_DIR);
@@ -590,7 +661,7 @@ app.post("/api/resize", async (req, res) => {
       : (Array.isArray(files) ? files : []).filter((f) => available.includes(f));
 
     if (targets.length === 0) {
-      return res.status(400).json({ error: "No images selected" });
+      return res.status(400).json({ error: msg(req, "noImagesSelected") });
     }
 
     const folder = getDateFolderName();
@@ -643,7 +714,11 @@ app.post("/api/resize", async (req, res) => {
       results,
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    const message =
+      err.message === "NO_WATERMARK_LOGO"
+        ? msg(req, "noWatermarkLogo")
+        : err.message;
+    res.status(500).json({ error: message });
   }
 });
 
@@ -669,7 +744,7 @@ app.get("/api/watermark-logo", (_req, res) => {
 app.post("/api/watermark-logo", uploadLogo.single("logo"), (req, res) => {
   try {
     if (!req.file) {
-      return res.status(400).json({ error: "Няма избран файл за лого" });
+      return res.status(400).json({ error: msg(req, "noLogoFile") });
     }
 
     // Keep only the newly uploaded logo.
@@ -711,12 +786,12 @@ app.post("/api/zip", async (req, res) => {
     const files = Array.isArray(req.body?.files) ? req.body.files : [];
 
     if (!DATE_FOLDER_RE.test(folder)) {
-      return res.status(400).json({ error: "Невалидна папка" });
+      return res.status(400).json({ error: msg(req, "invalidFolder") });
     }
 
     const outputDir = path.join(DOWNLOADS_DIR, folder);
     if (!fs.existsSync(outputDir)) {
-      return res.status(404).json({ error: "Папката не е намерена" });
+      return res.status(404).json({ error: msg(req, "folderNotFound") });
     }
 
     const names = files
@@ -725,7 +800,7 @@ app.post("/api/zip", async (req, res) => {
       .filter((name) => fs.existsSync(path.join(outputDir, name)));
 
     if (names.length === 0) {
-      return res.status(400).json({ error: "Няма валидни файлове за ZIP" });
+      return res.status(400).json({ error: msg(req, "noZipFiles") });
     }
 
     res.setHeader("Content-Type", "application/zip");
@@ -760,7 +835,7 @@ app.post("/api/zip", async (req, res) => {
 app.post("/api/upload", upload.array("images", MAX_UPLOAD_COUNT), async (req, res) => {
   try {
     if (!req.files?.length) {
-      return res.status(400).json({ error: "Няма избрани файлове" });
+      return res.status(400).json({ error: msg(req, "noUploadFiles") });
     }
 
     const uploaded = await Promise.all(
@@ -784,13 +859,15 @@ app.post("/api/upload", upload.array("images", MAX_UPLOAD_COUNT), async (req, re
   }
 });
 
-app.use((err, _req, res, next) => {
+app.use((err, req, res, next) => {
   if (err instanceof multer.MulterError) {
     if (err.code === "LIMIT_FILE_SIZE") {
-      return res.status(400).json({ error: "Файлът е твърде голям (макс. 50 MB)" });
+      return res.status(400).json({ error: msg(req, "fileTooLarge") });
     }
     if (err.code === "LIMIT_FILE_COUNT") {
-      return res.status(400).json({ error: `Максимум ${MAX_UPLOAD_COUNT} файла наведнъж` });
+      return res
+        .status(400)
+        .json({ error: msg(req, "tooManyFiles", { count: MAX_UPLOAD_COUNT }) });
     }
     return res.status(400).json({ error: err.message });
   }
@@ -810,12 +887,12 @@ app.get("/resizeimages/:folder/:name", (req, res) => {
   const name = path.basename(req.params.name);
 
   if (!DATE_FOLDER_RE.test(folder) || !safeImageName(name)) {
-    return res.status(400).json({ error: "Невалиден път" });
+    return res.status(400).json({ error: msg(req, "invalidPath") });
   }
 
   const filePath = path.join(DOWNLOADS_DIR, folder, name);
   if (!fs.existsSync(filePath)) {
-    return res.status(404).json({ error: "Файлът не е намерен" });
+    return res.status(404).json({ error: msg(req, "fileNotFound") });
   }
 
   res.sendFile(filePath);

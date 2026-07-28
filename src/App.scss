@@ -60,11 +60,48 @@
   border-radius: 22%;
 }
 
+.hero-controls {
+  display: flex;
+  align-items: flex-end;
+  gap: $space-md;
+  margin-top: 0.55rem;
+}
+
+.lang-toggle {
+  display: inline-flex;
+  padding: 2px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: $radius-pill;
+
+  button {
+    min-width: 2.4rem;
+    padding: $space-xs 0.65rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: $radius-pill;
+    transition: color $transition-fast, border-color $transition-fast, background $transition-fast;
+
+    &:hover {
+      color: var(--text);
+    }
+
+    &.on {
+      color: var(--accent);
+      border-color: var(--accent);
+      background: color-mix(in srgb, var(--accent) 14%, var(--surface));
+    }
+  }
+}
+
 .theme-toggle {
   display: inline-flex;
   align-items: center;
   gap: $space-md;
-  margin-top: 0.55rem;
   padding: $space-xs 0.55rem $space-xs $space-xs;
   color: var(--muted);
   background: var(--bg-elevated);
@@ -840,7 +877,7 @@ button.ghost {
     flex-direction: column;
   }
 
-  .theme-toggle {
+  .hero-controls {
     align-self: flex-end;
     margin-top: 0;
   }

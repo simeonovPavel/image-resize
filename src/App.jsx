@@ -10,7 +10,8 @@ import {
     formatSelectionSummary,
     getSizeChange,
 } from "./format";
-import {apiRequest} from "./api";
+import {apiRequest, setApiLang} from "./api";
+import {getInitialLang, saveLang, t} from "./i18n";
 import {
     loadHistory,
     loadSettings,
@@ -19,7 +20,7 @@ import {
 } from "./settingsStorage";
 
 const FORMAT_OPTIONS = [
-    {value: "original", label: "Оригинален"},
+    {value: "original", labelKey: "formatOriginal"},
     {value: "jpg", label: "JPEG (.jpg)"},
     {value: "jpeg", label: "JPEG (.jpeg)"},
     {value: "png", label: "PNG (.png)"},
@@ -30,27 +31,27 @@ const FORMAT_OPTIONS = [
 ];
 
 const FIT_OPTIONS = [
-    {value: "cover", label: "Cover (изрязва)"},
-    {value: "contain", label: "Contain (с полета)"},
-    {value: "fill", label: "Fill (разтяга)"},
-    {value: "inside", label: "Inside (вмества)"},
-    {value: "outside", label: "Outside (покрива)"},
+    {value: "cover", labelKey: "fitCover"},
+    {value: "contain", labelKey: "fitContain"},
+    {value: "fill", labelKey: "fitFill"},
+    {value: "inside", labelKey: "fitInside"},
+    {value: "outside", labelKey: "fitOutside"},
 ];
 
 const COMPRESSION_OPTIONS = [
-    {value: "max", quality: 95, label: "Максимум — почти без загуба"},
-    {value: "high", quality: 90, label: "Високо — печат / архив"},
-    {value: "web", quality: 82, label: "Уеб — баланс (препоръчително)"},
-    {value: "small", quality: 70, label: "Малък файл — социални мрежи"},
-    {value: "tiny", quality: 55, label: "Минимален — бързо зареждане"},
+    {value: "max", quality: 95, labelKey: "compressionMax"},
+    {value: "high", quality: 90, labelKey: "compressionHigh"},
+    {value: "web", quality: 82, labelKey: "compressionWeb"},
+    {value: "small", quality: 70, labelKey: "compressionSmall"},
+    {value: "tiny", quality: 55, labelKey: "compressionTiny"},
 ];
 
 const WATERMARK_POSITIONS = [
-    {value: "northwest", label: "Горе ляво"},
-    {value: "northeast", label: "Горе дясно"},
-    {value: "center", label: "Център"},
-    {value: "southwest", label: "Долу ляво"},
-    {value: "southeast", label: "Долу дясно"},
+    {value: "northwest", labelKey: "posNw"},
+    {value: "northeast", labelKey: "posNe"},
+    {value: "center", labelKey: "posCenter"},
+    {value: "southwest", labelKey: "posSw"},
+    {value: "southeast", labelKey: "posSe"},
 ];
 
 const THEME_KEY = "resize-theme";
@@ -78,6 +79,10 @@ function ActionIcon({children}) {
 function positiveNumber(value, fallback) {
     const n = Number(value);
     return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+function optionLabel(lang, opt) {
+    return opt.labelKey ? t(lang, opt.labelKey) : opt.label;
 }
 
 export default function App() {
@@ -111,6 +116,7 @@ export default function App() {
     const [lastResults, setLastResults] = useState([]);
     const [compareIndex, setCompareIndex] = useState(0);
     const [theme, setTheme] = useState(getInitialTheme);
+    const [lang, setLang] = useState(getInitialLang);
     const [uploading, setUploading] = useState(false);
     const [deleting, setDeleting] = useState(false);
     const [openingOutput, setOpeningOutput] = useState(false);
@@ -124,7 +130,7 @@ export default function App() {
         setError("");
         try {
             const {res, data} = await apiRequest("/api/images");
-            if (!res.ok) throw new Error("Неуспешно зареждане на снимките");
+            if (!res.ok) throw new Error(t(lang, "errLoadImages"));
             const imagesWithSize = await enrichWithFileSize(data);
             setImages(imagesWithSize);
             if (mergeSelection?.length) {
@@ -137,7 +143,7 @@ export default function App() {
                 setSelected(new Set(imagesWithSize.map((img) => img.name)));
             }
         } catch (err) {
-            setError(err.message || "Грешка при зареждане");
+            setError(err.message || t(lang, "errLoad"));
         } finally {
             setLoading(false);
         }
@@ -161,6 +167,12 @@ export default function App() {
         document.documentElement.setAttribute("data-theme", theme);
         localStorage.setItem(THEME_KEY, theme);
     }, [theme]);
+
+    useEffect(() => {
+        saveLang(lang);
+        setApiLang(lang);
+        document.documentElement.lang = lang;
+    }, [lang]);
 
     useEffect(() => {
         saveSettings({
@@ -224,7 +236,7 @@ export default function App() {
         setWatermarkPosition(s.watermarkPosition || "southeast");
         setWatermarkOpacity(s.watermarkOpacity ?? 0.4);
         setWatermarkScale(s.watermarkScale ?? 0.2);
-        setMessage(`Заредени настройки: ${entry.label}`);
+        setMessage(t(lang, "msgLoadedSettings", {label: entry.label}));
     }
 
     function handleWidthChange(raw) {
@@ -257,7 +269,7 @@ export default function App() {
 
     const activePresetId = findActivePreset(width, height);
     const selectedImages = images.filter((img) => selected.has(img.name));
-    const selectionSummary = formatSelectionSummary(selectedImages);
+    const selectionSummary = formatSelectionSummary(selectedImages, lang);
     const compressionOption =
         COMPRESSION_OPTIONS.find((opt) => opt.value === compression) ??
         COMPRESSION_OPTIONS.find((opt) => opt.value === "web");
@@ -335,16 +347,17 @@ export default function App() {
                     watermark,
                 }),
             });
-            if (!res.ok) throw new Error(data.error || "Resize неуспешен");
+            if (!res.ok) throw new Error(data.error || t(lang, "errResize"));
             setLastResults(data.results);
             setCompareIndex(0);
             const snapshot = currentSettingsSnapshot();
             saveSettings(snapshot);
             setHistory(pushHistory(snapshot));
+            const formatOpt = FORMAT_OPTIONS.find((opt) => opt.value === outputFormat);
             const formatLabel =
                 outputFormat === "original"
                     ? ""
-                    : ` · ${FORMAT_OPTIONS.find((opt) => opt.value === outputFormat)?.label ?? outputFormat}`;
+                    : ` · ${formatOpt ? optionLabel(lang, formatOpt) : outputFormat}`;
             const folderLabel = data.folder ? ` → Downloads\\${data.folder}` : "";
             const renameLabel = renameBase.trim()
                 ? ` · ${renameBase.trim()}-1…`
@@ -352,10 +365,18 @@ export default function App() {
             const compressionLabel = ` · Q${data.quality ?? compressionQuality}`;
             const watermarkLabel = watermarkEnabled ? " · watermark" : "";
             setMessage(
-                `Готово: ${data.count} снимки → ${width}×${height}${formatLabel}${compressionLabel}${watermarkLabel}${renameLabel}${folderLabel}`
+                t(lang, "msgDone", {
+                    count: data.count,
+                    size: `${width}×${height}`,
+                    format: formatLabel,
+                    compression: compressionLabel,
+                    watermark: watermarkLabel,
+                    rename: renameLabel,
+                    folder: folderLabel,
+                })
             );
         } catch (err) {
-            setError(err.message || "Грешка при resize");
+            setError(err.message || t(lang, "errResizeGeneric"));
         } finally {
             setResizing(false);
         }
@@ -378,14 +399,14 @@ export default function App() {
                 method: "POST",
                 body: formData,
             });
-            if (!res.ok) throw new Error(data.error || "Качването неуспешно");
+            if (!res.ok) throw new Error(data.error || t(lang, "errUpload"));
 
             await loadImages({
                 mergeSelection: data.files.map((file) => file.name),
             });
-            setMessage(`Качени ${data.count} снимки в images/`);
+            setMessage(t(lang, "msgUploaded", {count: data.count}));
         } catch (err) {
-            setError(err.message || "Грешка при качване");
+            setError(err.message || t(lang, "errUploadGeneric"));
         } finally {
             setUploading(false);
         }
@@ -405,13 +426,13 @@ export default function App() {
                 method: "POST",
                 body: formData,
             });
-            if (!res.ok) throw new Error(data.error || "Качването на лого неуспешно");
+            if (!res.ok) throw new Error(data.error || t(lang, "errLogoUpload"));
             setWatermarkLogo(data.logo);
             setWatermarkType("image");
             setWatermarkEnabled(true);
-            setMessage("Логото за watermark е качено");
+            setMessage(t(lang, "msgLogoUploaded"));
         } catch (err) {
-            setError(err.message || "Грешка при качване на лого");
+            setError(err.message || t(lang, "errLogoUploadGeneric"));
         } finally {
             setUploadingLogo(false);
         }
@@ -422,12 +443,12 @@ export default function App() {
             const {res, data} = await apiRequest("/api/watermark-logo", {
                 method: "DELETE",
             });
-            if (!res.ok) throw new Error(data.error || "Изтриването неуспешно");
+            if (!res.ok) throw new Error(data.error || t(lang, "errDelete"));
             setWatermarkLogo(null);
             if (watermarkType === "image") setWatermarkType("text");
-            setMessage("Логото е премахнато");
+            setMessage(t(lang, "msgLogoRemoved"));
         } catch (err) {
-            setError(err.message || "Грешка при изтриване на лого");
+            setError(err.message || t(lang, "errLogoDeleteGeneric"));
         }
     }
 
@@ -437,7 +458,7 @@ export default function App() {
 
         if (
             targets.length > 1 &&
-            !window.confirm(`Изтрий ${targets.length} избрани снимки?`)
+            !window.confirm(t(lang, "confirmDeleteMany", {count: targets.length}))
         ) {
             return;
         }
@@ -452,7 +473,7 @@ export default function App() {
                 headers: {"Content-Type": "application/json"},
                 body: JSON.stringify({files: targets}),
             });
-            if (!res.ok) throw new Error(data.error || "Изтриването неуспешно");
+            if (!res.ok) throw new Error(data.error || t(lang, "errDelete"));
 
             const deleted = new Set(data.deleted);
             setImages((prev) => prev.filter((img) => !deleted.has(img.name)));
@@ -464,11 +485,11 @@ export default function App() {
             setLastResults((prev) => prev.filter((img) => !deleted.has(img.sourceName) && !deleted.has(img.name)));
             setMessage(
                 data.count === 1
-                    ? `Изтрита 1 снимка`
-                    : `Изтрити ${data.count} снимки`
+                    ? t(lang, "msgDeletedOne")
+                    : t(lang, "msgDeletedMany", {count: data.count})
             );
         } catch (err) {
-            setError(err.message || "Грешка при изтриване");
+            setError(err.message || t(lang, "errDeleteGeneric"));
         } finally {
             setDeleting(false);
         }
@@ -482,7 +503,7 @@ export default function App() {
             const {res, data} = await apiRequest("/api/open-output", {
                 method: "POST",
             });
-            if (!res.ok) throw new Error(data.error || "Неуспешно отваряне на папката");
+            if (!res.ok) throw new Error(data.error || t(lang, "errOpenFolder"));
             if (data.path && navigator.clipboard?.writeText) {
                 try {
                     await navigator.clipboard.writeText(data.path);
@@ -492,11 +513,11 @@ export default function App() {
             }
             setMessage(
                 data.path
-                    ? `Опит за отваряне. Път (копиран): ${data.path}`
-                    : "Папката с резултатите е отворена"
+                    ? t(lang, "msgOpenPath", {path: data.path})
+                    : t(lang, "msgOpenOk")
             );
         } catch (err) {
-            setError(err.message || "Грешка при отваряне на папката");
+            setError(err.message || t(lang, "errOpenFolderGeneric"));
         } finally {
             setOpeningOutput(false);
         }
@@ -517,7 +538,7 @@ export default function App() {
                 }),
             });
             if (!res.ok) {
-                let messageText = "ZIP изтеглянето неуспешно";
+                let messageText = t(lang, "errZip");
                 try {
                     const data = await res.json();
                     messageText = data.error || messageText;
@@ -536,9 +557,9 @@ export default function App() {
             anchor.click();
             anchor.remove();
             URL.revokeObjectURL(url);
-            setMessage(`Изтеглен ZIP с ${lastResults.length} снимки`);
+            setMessage(t(lang, "msgZipDone", {count: lastResults.length}));
         } catch (err) {
-            setError(err.message || "Грешка при ZIP");
+            setError(err.message || t(lang, "errZipGeneric"));
         } finally {
             setZipping(false);
         }
@@ -556,40 +577,50 @@ export default function App() {
                             width="36"
                             height="36"
                         />
-                        <span>Image Resize</span>
+                        <span>{t(lang, "brand")}</span>
                     </p>
-                    <button
-                        type="button"
-                        className={`theme-toggle ${isLight ? "on" : ""}`}
-                        onClick={toggleTheme}
-                        aria-pressed={isLight}
-                        aria-label={isLight ? "Включи тъмна тема" : "Включи светла тема"}
-                    >
-            <span className="theme-toggle-track" aria-hidden="true">
-              <span className="theme-toggle-thumb"/>
-            </span>
-                        <span className="theme-toggle-label">
-              {isLight ? "Светла" : "Тъмна"}
-            </span>
-                    </button>
+                    <div className="hero-controls">
+                        <div className="lang-toggle" role="group" aria-label={t(lang, "langSwitch")}>
+                            <button type="button" className={lang === "bg" ? "on" : ""} onClick={() => setLang("bg")}>{t(lang, "langBg")}</button>
+                            <button type="button" className={lang === "en" ? "on" : ""} onClick={() => setLang("en")}>{t(lang, "langEn")}</button>
+                        </div>
+                        <button
+                            type="button"
+                            className={`theme-toggle ${isLight ? "on" : ""}`}
+                            onClick={toggleTheme}
+                            aria-pressed={isLight}
+                            aria-label={isLight ? t(lang, "themeToDark") : t(lang, "themeToLight")}
+                        >
+                            <span className="theme-toggle-track" aria-hidden="true">
+                              <span className="theme-toggle-thumb"/>
+                            </span>
+                            <span className="theme-toggle-label">
+                              {isLight ? t(lang, "themeLight") : t(lang, "themeDark")}
+                            </span>
+                        </button>
+                    </div>
                 </div>
-                <h1>Преоразмери снимките от папката</h1>
+                <h1>{t(lang, "heroTitle")}</h1>
                 <p className="lede">
-                    Избери файлове от <code>images/</code>, задай размер и запази в{" "}
-                    <code>Downloads/resize-ГГГГ-ММ-ДД/</code>.
+                    {t(lang, "heroLede", {
+                        images: "images/",
+                        downloads:
+                            lang === "en"
+                                ? "Downloads/resize-YYYY-MM-DD/"
+                                : "Downloads/resize-ГГГГ-ММ-ДД/",
+                    })}
                 </p>
             </header>
 
             <section className="gallery">
                 <div className="section-heading">
-                    <h2>Качени снимки</h2>
-                    <p>Избери файловете, които искаш да преоразмериш.</p>
+                    <h2>{t(lang, "galleryTitle")}</h2>
+                    <p>{t(lang, "galleryHint")}</p>
                 </div>
-                {loading && <p className="empty">Зареждане…</p>}
+                {loading && <p className="empty">{t(lang, "loading")}</p>}
                 {!loading && images.length === 0 && (
                     <p className="empty">
-                        Няма снимки в <code>images/</code>. Качи файлове с бутона Качи
-                        снимки или добави ги ръчно и натисни Презареди.
+                        {t(lang, "emptyGallery", {images: "images/"})}
                     </p>
                 )}
                 <div className="grid">
@@ -615,7 +646,7 @@ export default function App() {
                                     type="button"
                                     className="card-delete"
                                     disabled={deleting}
-                                    aria-label={`Изтрий ${img.name}`}
+                                    aria-label={t(lang, "deleteImage", {name: img.name})}
                                     onClick={() => handleDelete(img.name)}
                                 >
                                     ×
@@ -650,7 +681,7 @@ export default function App() {
                                         <path d="M6.5 7.5 10 4l3.5 3.5"/>
                                         <path d="M4 14.5v1A1.5 1.5 0 0 0 5.5 17h9A1.5 1.5 0 0 0 16 15.5v-1"/>
                                     </ActionIcon>
-                                    {uploading ? "Качва…" : "Качи снимки"}
+                                    {uploading ? t(lang, "uploading") : t(lang, "upload")}
                                 </button>
                             </div>
                             <button type="button" className="ghost" onClick={toggleAll}>
@@ -661,15 +692,15 @@ export default function App() {
                                     <rect x="11" y="11" width="5.5" height="5.5" rx="1"/>
                                 </ActionIcon>
                                 {selected.size === images.length
-                                    ? "Махни всички"
-                                    : "Избери всички"}
+                                    ? t(lang, "deselectAll")
+                                    : t(lang, "selectAll")}
                             </button>
                             <button type="button" className="ghost" onClick={loadImages}>
                                 <ActionIcon>
                                     <path d="M16 10a6 6 0 1 1-1.6-4.1"/>
                                     <path d="M16 4v4h-4"/>
                                 </ActionIcon>
-                                Презареди
+                                {t(lang, "reload")}
                             </button>
                             <button
                                 type="button"
@@ -682,7 +713,9 @@ export default function App() {
                                     <path d="M8 3.5h4"/>
                                     <path d="M6.5 6l.7 9.5h5.6L13.5 6"/>
                                 </ActionIcon>
-                                {deleting ? "Изтрива…" : `Изтрий (${selected.size})`}
+                                {deleting
+                                    ? t(lang, "deleting")
+                                    : t(lang, "delete", {count: selected.size})}
                             </button>
                             <button
                                 type="button"
@@ -700,13 +733,15 @@ export default function App() {
                                     <path d="m13.5 16-3.5-3.5"/>
                                     <path d="M6.5 4 10 7.5"/>
                                 </ActionIcon>
-                                {resizing ? "Обработва…" : `Resize (${selected.size})`}
+                                {resizing
+                                    ? t(lang, "resizing")
+                                    : t(lang, "resize", {count: selected.size})}
                             </button>
                         </div>
 
                         <div className="dimension-fields">
                             <label>
-                                Ширина
+                                {t(lang, "width")}
                                 <input
                                     type="number"
                                     min="1"
@@ -719,7 +754,7 @@ export default function App() {
                                 className={`aspect-lock ${lockAspect ? "on" : ""}`}
                                 onClick={toggleAspectLock}
                                 aria-pressed={lockAspect}
-                                title={lockAspect ? "Отключи пропорцията" : "Заключи пропорцията"}
+                                title={lockAspect ? t(lang, "unlockAspect") : t(lang, "lockAspect")}
                             >
                                 <ActionIcon>
                                     {lockAspect ? (
@@ -735,11 +770,11 @@ export default function App() {
                                     )}
                                 </ActionIcon>
                                 <span className="sr-only">
-                  {lockAspect ? "Пропорцията е заключена" : "Заключи пропорцията"}
+                  {lockAspect ? t(lang, "aspectLocked") : t(lang, "lockAspect")}
                 </span>
                             </button>
                             <label>
-                                Височина
+                                {t(lang, "height")}
                                 <input
                                     type="number"
                                     min="1"
@@ -750,47 +785,47 @@ export default function App() {
                         </div>
 
                         <label>
-                            Fit
+                            {t(lang, "fit")}
                             <select value={fit} onChange={(e) => setFit(e.target.value)}>
                                 {FIT_OPTIONS.map((opt) => (
                                     <option key={opt.value} value={opt.value}>
-                                        {opt.label}
+                                        {optionLabel(lang, opt)}
                                     </option>
                                 ))}
                             </select>
                         </label>
                         <label>
-                            Формат
+                            {t(lang, "format")}
                             <select
                                 value={outputFormat}
                                 onChange={(e) => setOutputFormat(e.target.value)}
                             >
                                 {FORMAT_OPTIONS.map((opt) => (
                                     <option key={opt.value} value={opt.value}>
-                                        {opt.label}
+                                        {optionLabel(lang, opt)}
                                     </option>
                                 ))}
                             </select>
                         </label>
                         <label>
-                            Компресия
+                            {t(lang, "compression")}
                             <select
                                 value={compression}
                                 onChange={(e) => setCompression(e.target.value)}
                             >
                                 {COMPRESSION_OPTIONS.map((opt) => (
                                     <option key={opt.value} value={opt.value}>
-                                        {opt.label}
+                                        {optionLabel(lang, opt)}
                                     </option>
                                 ))}
                             </select>
                         </label>
                         <label className="rename-field">
-                            Ново име
+                            {t(lang, "rename")}
                             <input
                                 type="text"
                                 value={renameBase}
-                                placeholder="напр. cover → cover-1, cover-2…"
+                                placeholder={t(lang, "renamePlaceholder")}
                                 autoComplete="off"
                                 spellCheck="false"
                                 onChange={(e) => setRenameBase(e.target.value)}
@@ -805,37 +840,37 @@ export default function App() {
                                         checked={watermarkEnabled}
                                         onChange={(e) => setWatermarkEnabled(e.target.checked)}
                                     />
-                                    Watermark
+                                    {t(lang, "wmTitle")}
                                 </label>
-                                <p>Текст или лого върху готовите снимки.</p>
+                                <p>{t(lang, "wmHint")}</p>
                             </div>
                             {watermarkEnabled && (
                                 <div className="watermark-grid">
                                     <label>
-                                        Тип
+                                        {t(lang, "wmType")}
                                         <select
                                             value={watermarkType}
                                             onChange={(e) => setWatermarkType(e.target.value)}
                                         >
-                                            <option value="text">Текст</option>
-                                            <option value="image">Лого</option>
+                                            <option value="text">{t(lang, "wmText")}</option>
+                                            <option value="image">{t(lang, "wmLogo")}</option>
                                         </select>
                                     </label>
                                     <label>
-                                        Позиция
+                                        {t(lang, "wmPosition")}
                                         <select
                                             value={watermarkPosition}
                                             onChange={(e) => setWatermarkPosition(e.target.value)}
                                         >
                                             {WATERMARK_POSITIONS.map((opt) => (
                                                 <option key={opt.value} value={opt.value}>
-                                                    {opt.label}
+                                                    {optionLabel(lang, opt)}
                                                 </option>
                                             ))}
                                         </select>
                                     </label>
                                     <label>
-                                        Прозрачност
+                                        {t(lang, "wmOpacity")}
                                         <input
                                             type="number"
                                             min="0.05"
@@ -847,11 +882,11 @@ export default function App() {
                                     </label>
                                     {watermarkType === "text" ? (
                                         <label className="watermark-span-2">
-                                            Текст
+                                            {t(lang, "wmText")}
                                             <input
                                                 type="text"
                                                 value={watermarkText}
-                                                placeholder="напр. © Resize"
+                                                placeholder={t(lang, "wmTextPlaceholder")}
                                                 maxLength={80}
                                                 onChange={(e) => setWatermarkText(e.target.value)}
                                             />
@@ -859,7 +894,7 @@ export default function App() {
                                     ) : (
                                         <>
                                             <label>
-                                                Мащаб
+                                                {t(lang, "wmScale")}
                                                 <input
                                                     type="number"
                                                     min="0.05"
@@ -883,7 +918,7 @@ export default function App() {
                                                     disabled={uploadingLogo}
                                                     onClick={() => logoInputRef.current?.click()}
                                                 >
-                                                    {uploadingLogo ? "Качва…" : "Качи лого"}
+                                                    {uploadingLogo ? t(lang, "uploading") : t(lang, "wmUploadLogo")}
                                                 </button>
                                                 {watermarkLogo && (
                                                     <button
@@ -891,7 +926,7 @@ export default function App() {
                                                         className="ghost danger"
                                                         onClick={handleDeleteLogo}
                                                     >
-                                                        Премахни
+                                                        {t(lang, "wmRemoveLogo")}
                                                     </button>
                                                 )}
                                             </div>
@@ -909,17 +944,17 @@ export default function App() {
 
                         <div className="size-summary">
                             <p>
-                                <span className="size-summary-label">Целеви размер: </span>
+                                <span className="size-summary-label">{t(lang, "targetSize")}</span>
                                 <span>
                   <strong>
                     {formatDimensions(Number(width), Number(height))}
                   </strong>
-                                    {lockAspect ? " · заключена пропорция" : ""}
+                                    {lockAspect ? t(lang, "aspectLockedHint") : ""}
                 </span>
                             </p>
                             {selectionSummary && (
                                 <p>
-                                    <span className="size-summary-label">Оригинал: </span>
+                                    <span className="size-summary-label">{t(lang, "original")}</span>
                                     <span>
                     <strong>{selectionSummary}</strong>
                   </span>
@@ -937,14 +972,19 @@ export default function App() {
                         targetHeight={Number(height)}
                         activeFit={fit}
                         onSelectFit={setFit}
+                        title={t(lang, "fitPreviewTitle")}
+                        hint={t(lang, "fitPreviewHint", {
+                            width: Number(width),
+                            height: Number(height),
+                        })}
                     />
 
                     {lastResults.length > 0 && (
                         <section className="results">
                             <div className="section-heading">
                                 <div>
-                                    <h2>Генерирани снимки</h2>
-                                    <p>Записват се в Downloads с папка по днешна дата.</p>
+                                    <h2>{t(lang, "resultsTitle")}</h2>
+                                    <p>{t(lang, "resultsHint")}</p>
                                 </div>
                                 <div className="results-actions">
                                     <button
@@ -959,7 +999,7 @@ export default function App() {
                                             <path d="M10 10.5v4"/>
                                             <path d="m8 13 2 1.5L12 13"/>
                                         </ActionIcon>
-                                        {zipping ? "Подготвя…" : "Изтегли ZIP"}
+                                        {zipping ? t(lang, "zipping") : t(lang, "downloadZip")}
                                     </button>
                                     <button
                                         type="button"
@@ -971,7 +1011,7 @@ export default function App() {
                                             <path d="M3.5 15.5v-11h4l1.4 2H16.5v9z"/>
                                             <path d="M10.5 10h4"/>
                                         </ActionIcon>
-                                        {openingOutput ? "Отваря…" : "Отвори папката"}
+                                        {openingOutput ? t(lang, "openingFolder") : t(lang, "openFolder")}
                                     </button>
                                 </div>
                             </div>
@@ -979,10 +1019,10 @@ export default function App() {
                             {compareResult && (
                                 <div className="compare-block">
                                     <div className="compare-block-heading">
-                                        <h3>Преди / след</h3>
+                                        <h3>{t(lang, "compareTitle")}</h3>
                                         {lastResults.length > 1 && (
                                             <label>
-                                                Снимка
+                                                {t(lang, "comparePhoto")}
                                                 <select
                                                     value={compareIndex}
                                                     onChange={(e) => setCompareIndex(Number(e.target.value))}
@@ -1003,8 +1043,8 @@ export default function App() {
                                             compareResult.url
                                         }
                                         afterSrc={`${compareResult.url}?t=${compareResult.bytes}`}
-                                        beforeLabel="Оригинал"
-                                        afterLabel="Резултат"
+                                        beforeLabel={t(lang, "compareBefore")}
+                                        afterLabel={t(lang, "compareAfter")}
                                         alt={compareResult.name}
                                     />
                                 </div>
@@ -1030,13 +1070,13 @@ export default function App() {
                                                     className={`size-change ${sizeChange.direction}`}
                                                     title={
                                                         sizeChange.direction === "smaller"
-                                                            ? "По-малък от оригинала"
+                                                            ? t(lang, "sizeSmaller")
                                                             : sizeChange.direction === "larger"
-                                                              ? "По-голям от оригинала"
-                                                              : "Същият размер"
+                                                              ? t(lang, "sizeLarger")
+                                                              : t(lang, "sizeSame")
                                                     }
                                                 >
-                                                    {sizeChange.label} спрямо оригинала
+                                                    {t(lang, "sizeVsOriginal", {label: sizeChange.label})}
                                                 </span>
                                             )}
                                         </div>
@@ -1052,8 +1092,8 @@ export default function App() {
                     {history.length > 0 && (
                         <section className="history">
                             <div className="presets-header">
-                                <h2>Последни настройки</h2>
-                                <p>Кликни, за да заредиш размер, формат и компресия.</p>
+                                <h2>{t(lang, "historyTitle")}</h2>
+                                <p>{t(lang, "historyHint")}</p>
                             </div>
                             <div className="history-list">
                                 {history.map((entry) => (
@@ -1072,17 +1112,17 @@ export default function App() {
 
                     <section className="presets">
                         <div className="presets-header">
-                            <h2>Готови размери</h2>
-                            <p>Избери aspect ratio и размер с един клик.</p>
+                            <h2>{t(lang, "presetsTitle")}</h2>
+                            <p>{t(lang, "presetsHint")}</p>
                         </div>
                         {ASPECT_RATIO_PRESETS.map((group, index) => (
                             <details
-                                key={group.group}
+                                key={group.groupKey}
                                 className="preset-group"
                                 open={index === 0}
                             >
                                 <summary className="preset-group-summary">
-                                    <span>{group.group}</span>
+                                    <span>{t(lang, group.groupKey)}</span>
                                     <span className="preset-chevron" aria-hidden="true"/>
                                 </summary>
                                 <div className="preset-grid">
@@ -1096,7 +1136,9 @@ export default function App() {
                                             onClick={() => applyPreset(preset)}
                                         >
                                             <span className="preset-ratio">{preset.ratio}</span>
-                                            <span className="preset-label">{preset.label}</span>
+                                            <span className="preset-label">
+                                                {preset.labelKey ? t(lang, preset.labelKey) : preset.label}
+                                            </span>
                                             <span className="preset-size">
                                                 {formatDimensions(preset.width, preset.height)}
                                             </span>
