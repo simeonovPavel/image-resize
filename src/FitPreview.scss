@@ -1,0 +1,105 @@
+@use "./styles/variables" as *;
+
+.fit-preview {
+  margin-top: $space-4xl;
+  padding: $space-3xl;
+  @include panel;
+}
+
+.fit-preview-header {
+  margin-bottom: $space-2xl;
+
+  h2 {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 600;
+  }
+
+  p {
+    margin: $space-xs 0 0;
+    font-size: 0.88rem;
+    color: var(--muted);
+  }
+}
+
+.fit-preview-row + .fit-preview-row {
+  margin-top: $space-2xl;
+  padding-top: $space-2xl;
+  border-top: 1px solid var(--border);
+}
+
+.fit-preview-image-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: $space-xs $space-lg;
+  align-items: baseline;
+  margin-bottom: $space-lg;
+}
+
+.fit-preview-name {
+  font-size: 0.92rem;
+  font-weight: 500;
+}
+
+.fit-preview-original {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.fit-preview-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(108px, 1fr));
+  gap: $space-md;
+}
+
+.fit-preview-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.55rem;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: $radius-lg;
+  transition: border-color $transition-fast, transform $transition-fast,
+    background $transition-fast;
+
+  &:hover {
+    border-color: var(--accent);
+    transform: translateY(-1px);
+  }
+
+  &.active {
+    @include active-chip;
+
+    span {
+      color: var(--accent);
+    }
+  }
+
+  span {
+    font-size: 0.78rem;
+    font-weight: 500;
+    color: var(--muted);
+  }
+}
+
+.fit-preview-canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: $radius-sm;
+}
+
+.fit-preview-more {
+  margin: $space-2xl 0 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+@include media-mobile {
+  .fit-preview-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

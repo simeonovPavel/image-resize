@@ -1,0 +1,58 @@
+@use "./styles/variables" as *;
+
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap");
+
+:root,
+[data-theme="dark"] {
+  @include theme-dark;
+}
+
+[data-theme="light"] {
+  @include theme-light;
+}
+
+:root {
+  font-family: $font-family-base;
+  color: var(--text);
+  background: var(--bg);
+  line-height: $line-height-base;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: var(--text);
+  background:
+    radial-gradient(ellipse 80% 50% at 10% -10%, var(--glow-1), transparent 55%),
+    radial-gradient(ellipse 60% 40% at 90% 0%, var(--glow-2), transparent 50%),
+    var(--bg);
+  transition: background $transition-theme, color $transition-theme;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+img {
+  display: block;
+  max-width: 100%;
+}
